@@ -12,13 +12,13 @@ using namespace cv;
 using std::ofstream;
 
 //Se encarga de realiza el algoritmo de sobel a la imagen
-void noBorderProcessing(Mat imgGray, Mat imgSobel, float **Kernel, float **Kernel2, , int numprocs, int processId)
+void noBorderProcessing(Mat imgGray, Mat imgSobel, float **Kernel, float **Kernel2, int numprocs, int processId)
 {
     //Se recorre la imagen completa exclugendo los pixeles borde para que la
     //operacion de convolucion siguiente puede hacerse sin padding
     //#pragma omp parallel for collapse(2)
     int init = imgGray.rows / numprocs * processId;
-    int fin = init + (imgOrig.rows / numprocs) - 1;
+    int fin = init + (imgGray.rows / numprocs) - 1;
     
     for (int y = init + 1; y < fin - 1; y++)
     {
@@ -176,7 +176,7 @@ int main(int argc, char *argv[])
     myfile.open("tiempos.txt", std::ios_base::app);
     myfile << "Imagen: " << argv[1] << " - ";
     myfile << "Tiempo: " << tval_result.tv_sec << "." << tval_result.tv_usec << " s - ";
-     myfile << "Hilos: " << numThreads << "\n";
+    myfile << "Procesos: " << numprocs << "\n";
     myfile.close();
 
     printf("%ld.%ld \n",tval_result.tv_sec,tval_result.tv_usec);
