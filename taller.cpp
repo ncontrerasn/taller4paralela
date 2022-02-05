@@ -49,7 +49,7 @@ void noBorderProcessing(Mat imgGray, Mat imgSobel, float **Kernel, float **Kerne
     }
 }
 
-//Se encarga de recibida dos imagenes de mismo tamaño, sobrescribir una como
+//Se encarga de recibida dos imagenes de mismo tamaÃ±o, sobrescribir una como
 //la version en escala de grises de la otra
 void greyscaleProcessing(Mat imgOrig, Mat imgGray, int numprocs, int processId)
 {
@@ -108,8 +108,7 @@ int main(int argc, char *argv[])
     //como paso fundamental antes de aplicar sobel
     greyscaleProcessing(imgOrig, imgGray, numprocs, processId);
     //#pragma omp barrier
-    MPI_Barrier();
-
+    MPI_Barrier( MPI_COMM_WORLD );
     //nombre de la imagen en escala de grises
     string string1(argv[1]);
     string1 = string1.substr(0, string1.size() - 4);
@@ -156,8 +155,8 @@ int main(int argc, char *argv[])
 
     //Se llama a la funcion que realiza el procedimiento para hallar sobel
     noBorderProcessing(imgGray, imgSobel, Kernel, Kernel2, numprocs, processId);
-    #pragma omp barrier
-
+    MPI_Barrier( MPI_COMM_WORLD ); 
+    MPI_Finalize();
     for (int i = 0; i < 3; i++){
         free(Kernel[i]);
         free(Kernel2[i]);
