@@ -71,7 +71,7 @@ int main(int argc, char** argv)
   if ( rank == 0 ) 
   { 
     // read the image
-    imgOrig = cv::imread( "image.jpg", cv::IMREAD_COLOR );
+    imgOrig = cv::imread( "720p.jpg", cv::IMREAD_COLOR );
 
     // check if it's empty:
     if ( imgOrig.empty() ) 
