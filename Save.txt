@@ -25,6 +25,7 @@ int main(int argc, char **argv)
   // partial buffer, to contain the image.
   // 'uchar' means 'unsigned char', i.e. an 8-bit value, because each pixel in an image is a byte (0..255)
   uchar *partialBuffer;
+  uchar *partialBufferSobel;
 
   size_t rows;
   size_t cols;
@@ -60,6 +61,11 @@ int main(int argc, char **argv)
     // the explanation can be found here: https://stackoverflow.com/a/26441073/4003714
     imageTotalSize = imgOrig.step[0] * imgOrig.rows;
 
+    std::cout << "imageTotalSize: " << imageTotalSize << std::endl;
+    std::cout << "rows: " << rows << std::endl;
+    std::cout << "cols: " << cols << std::endl;
+    std::cout << "rcSize: " << cols * rows * 3 << std::endl;
+
     // check if we can evenly divide the image bytes by the number of processes
     // the image.total() method returns the number of elements, i.e. (rows * cols)
     if (imgOrig.total() % size)
@@ -76,6 +82,8 @@ int main(int argc, char **argv)
 
   // send the "partial size" from #0 to other processes:
   MPI_Bcast(&imagePartialSize, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&imageTotalSize, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
+  // unsigned char h_imgOrig[imageTotalSize];
 
   MPI_Bcast(&rows, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
   MPI_Bcast(&cols, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
@@ -88,6 +96,9 @@ int main(int argc, char **argv)
 
   // allocate the partial buffer:
   partialBuffer = new uchar[imagePartialSize];
+
+  // allocate the partial buffer:
+  partialBufferSobel = new uchar[imagePartialSize];
 
   // synchronize the processe here, to make sure each process has allocated the buffer:
   MPI_Barrier(MPI_COMM_WORLD);
@@ -153,16 +164,102 @@ int main(int argc, char **argv)
   // and now we finally send the partial buffers back to the ROOT, gathering the complete image:
   MPI_Gather(partialBuffer, imagePartialSize, MPI_UNSIGNED_CHAR, imgGray.data, imagePartialSize, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
+  // initialize the output image (only need to do it in the ROOT process)
+  /*if (rank == 0)
+  {
+    unsigned char *rgb_image = imgGray.data;
+    // llenar el array de datos rgb del host
+    int x = 0;
+    for (x = 0; x < rows * cols * 3; x++)
+      h_imgOrig[x] = rgb_image[x];
+
+    MPI_Bcast(h_imgOrig, imageTotalSize, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
+  }*/
+
+  // scatter the image between the processes:
+  MPI_Scatter(imgGray.data, imagePartialSize, MPI_UNSIGNED_CHAR, partialBuffer, imagePartialSize, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
+
+  // scatter the image between the processes:
+  MPI_Scatter(imgGray.data, imagePartialSize, MPI_UNSIGNED_CHAR, partialBufferSobel, imagePartialSize, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
+
+  // synchronize the image processing:
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  float Kernel[3][3];
+  float Kernel2[3][3];
+  Kernel[0][0] = -1;
+  Kernel[0][1] = 0;
+  Kernel[0][2] = 1;
+  Kernel[1][0] = -2;
+  Kernel[1][1] = 0;
+  Kernel[1][2] = 2;
+  Kernel[2][0] = -1;
+  Kernel[2][1] = 0;
+  Kernel[2][2] = 1;
+  Kernel2[0][0] = -1;
+  Kernel2[0][1] = -2;
+  Kernel2[0][2] = -1;
+  Kernel2[1][0] = 0;
+  Kernel2[1][1] = 0;
+  Kernel2[1][2] = 0;
+  Kernel2[2][0] = 1;
+  Kernel2[2][1] = 2;
+  Kernel2[2][2] = 1;
+
+  int YoffSet = cols * 3;
+  int x;
+
+  for (x = 0; x < imagePartialSize; x = x + 3)
+  {
+    // Se debe realizar la operacion por cada uno de los colores RGB que se encuentran en cada pixel
+    for (int f = 0; f < 3; f++)
+    {
+      float sum = 0.0;
+      float sum2 = 0.0;
+      float fsum = 0.0;
+      // Se establece con estos dos fors la operacion de convolucion entre la matriz de la imagen y los kernels
+      for (int k = -1; k <= 1; k++)
+      {
+        for (int j = -1; j <= 1; j++)
+        {
+          if ((0 <= (x + YoffSet * j + k * 3 + f)) && ((x + YoffSet * j + k * 3 + f) < imagePartialSize))
+          {
+            sum = sum + Kernel[j + 1][k + 1] * partialBuffer[x + YoffSet * j + k * 3 + f];
+            sum2 = sum2 + Kernel2[j + 1][k + 1] * partialBuffer[x + YoffSet * j + k * 3 + f];
+          }
+        }
+      }
+      // Segun dicta el algoritmo se aplica la siguiente operacion
+      fsum = ceilf(sqrt((sum * sum) + (sum2 * sum2)));
+      // el valor resultante se substituye en el pixel correspondiente de la imagen objetivo
+      partialBufferSobel[x + f] = fsum;
+    }
+  }
+  std::cout << "imagePartialSize: " << imagePartialSize << std::endl;
+
+  // synchronize the image processing:
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  // initialize the output image (only need to do it in the ROOT process)
+  if (rank == 0)
+  {
+    imgSobel = cv::Mat(imgOrig.size(), imgOrig.type());
+  }
+
+  // and now we finally send the partial buffers back to the ROOT, gathering the complete image:
+  MPI_Gather(partialBufferSobel, imagePartialSize, MPI_UNSIGNED_CHAR, imgSobel.data, imagePartialSize, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
+
   // Save and display image, onle in the ROOT process
   if (rank == 0)
   {
     // save the image:
     cv::imwrite("gray.jpg", imgGray);
+    cv::imwrite("sobel.jpg", imgSobel);
 
     // or show it on screen:
     while (true)
     {
-      cv::imshow("image", imgGray);
+      cv::imshow("image", imgSobel);
 
       if (cv::waitKey(1) == 27)
         break;
