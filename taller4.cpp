@@ -16,10 +16,8 @@ int main(int argc, char **argv)
   // Esto gracias al tipo de dato Mat que permite manejar la imagen como un objeto con atributos
   cv::Mat imgOrig, imgSobel, imgGray;
 
-  // the total size of the image matrix (rows * columns * channels):
   size_t imageTotalSize;
 
-  // partial size (how many bytes will be sent to each process):
   size_t imagePartialSize;
 
   // partial buffer, to contain the image.
@@ -35,22 +33,19 @@ int main(int argc, char **argv)
 
   // ------------------------------------
 
-  // start the MPI part
   MPI_Init(&argc, &argv);
 
-  // get the world size and current rank:
   int size;
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  // read the image and its properties in the ROOT process:
   if (rank == 0)
   {
-    // read the image
+    
     imgOrig = cv::imread(argv[1], cv::IMREAD_UNCHANGED);
 
-    // check if it's empty:
+    
     if (imgOrig.empty())
     {
       std::cerr << "Image is empty, terminating!" << std::endl;
@@ -60,50 +55,39 @@ int main(int argc, char **argv)
     rows = imgOrig.rows;
     cols = imgOrig.cols;
 
-    // get the total size of the image matrix (rows * columns * channels)
-    // the explanation can be found here: https://stackoverflow.com/a/26441073/4003714
+
     imageTotalSize = imgOrig.step[0] * imgOrig.rows;
 
-    // check if we can evenly divide the image bytes by the number of processes
-    // the image.total() method returns the number of elements, i.e. (rows * cols)
+
     if (imgOrig.total() % size)
     {
       std::cerr << "Cannot evenly divide the image between the processes. Choose a different number of processes!" << std::endl;
       return -2;
     }
 
-    // get partial size (how many bytes are sent to each process):
     imagePartialSize = imageTotalSize / size;
   }
 
-  // send the "partial size" from #0 to other processes:
+
   MPI_Bcast(&imagePartialSize, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
   MPI_Bcast(&imageTotalSize, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
-  // unsigned char h_imgOrig[imageTotalSize];
 
   MPI_Bcast(&rows, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
   MPI_Bcast(&cols, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
 
-  // synchronize the processes here, to make sure that the sizes are initialized:
   MPI_Barrier(MPI_COMM_WORLD);
 
-  // allocate the partial buffer:
   partialBuffer = new uchar[imagePartialSize];
 
-  // allocate the partial buffer:
   partialBufferSobel = new uchar[imagePartialSize];
 
-  // synchronize the processe here, to make sure each process has allocated the buffer:
   MPI_Barrier(MPI_COMM_WORLD);
 
-  // scatter the image between the processes:
   MPI_Scatter(imgOrig.data, imagePartialSize, MPI_UNSIGNED_CHAR, partialBuffer, imagePartialSize, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
-  // synchronize the image processing:
   MPI_Barrier(MPI_COMM_WORLD);
 
-  // -----------------------------------------------------------------------------------------------------------------------------------------------
-  // AND NOW HERE EACH PROCESS HAS ITS OWN PART OF THE IMAGE!
+  // --------------------------------------------------------Grayscale---------------------------------------------------------------------------------------
 
   for (size_t i = 0; i < imagePartialSize; i += 3)
   {
@@ -118,26 +102,22 @@ int main(int argc, char **argv)
 
   // -----------------------------------------------------------------------------------------------------------------------------------------------
 
-  // synchronize the image processing:
   MPI_Barrier(MPI_COMM_WORLD);
 
-  // initialize the output image (only need to do it in the ROOT process)
   if (rank == 0)
   {
     imgGray = cv::Mat(imgOrig.size(), imgOrig.type());
   }
 
-  // and now we finally send the partial buffers back to the ROOT, gathering the complete image:
   MPI_Gather(partialBuffer, imagePartialSize, MPI_UNSIGNED_CHAR, imgGray.data, imagePartialSize, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
-  // scatter the image between the processes:
   MPI_Scatter(imgGray.data, imagePartialSize, MPI_UNSIGNED_CHAR, partialBuffer, imagePartialSize, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
-  // scatter the image between the processes:
   MPI_Scatter(imgGray.data, imagePartialSize, MPI_UNSIGNED_CHAR, partialBufferSobel, imagePartialSize, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
-  // synchronize the image processing:
   MPI_Barrier(MPI_COMM_WORLD);
+
+  // -----------------------------------------------------Sobel------------------------------------------------------------------------------------------
 
   float Kernel[3][3];
   float Kernel2[3][3];
@@ -190,22 +170,20 @@ int main(int argc, char **argv)
     }
   }
 
-  // synchronize the image processing:
+  // -----------------------------------------------------------------------------------------------------------------------------------------------
+
   MPI_Barrier(MPI_COMM_WORLD);
 
-  // initialize the output image (only need to do it in the ROOT process)
   if (rank == 0)
   {
     imgSobel = cv::Mat(imgOrig.size(), imgOrig.type());
   }
 
-  // and now we finally send the partial buffers back to the ROOT, gathering the complete image:
   MPI_Gather(partialBufferSobel, imagePartialSize, MPI_UNSIGNED_CHAR, imgSobel.data, imagePartialSize, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
-  // Save and display image, onle in the ROOT process
   if (rank == 0)
   {
-    // save the image:
+    
     string string1(argv[1]);
     string1 = string1.substr(0, string1.size() - 4);
     string1 += "grayscale.png";
