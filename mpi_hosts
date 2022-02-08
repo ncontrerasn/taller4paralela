@@ -1,1 +1,9 @@
 localhost slots=2
+
+nodo1 slots=2
+nodo2 slots=2
+nodo3 slots=2
+nodo4 slots=2
+nodo5 slots=2
+nodo6 slots=2
+nodo7 slots=2
