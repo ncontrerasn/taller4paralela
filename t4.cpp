@@ -257,13 +257,13 @@ int main(int argc, char **argv)
     cv::imwrite("sobel.jpg", imgSobel);
 
     // or show it on screen:
-    while (true)
+    /*while (true)
     {
       cv::imshow("image", imgSobel);
 
       if (cv::waitKey(1) == 27)
         break;
-    }
+    }*/
     cv::destroyAllWindows();
   }
 
