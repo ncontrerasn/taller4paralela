@@ -1,17 +1,10 @@
-compilar
-sudo mpic++ t4.cpp -o t \`pkg-config --cflags --libs opencv\`
-
-correr
-mpirun -np 2 --hostfile mpi_hosts ./t 720p.jpg 720p
-sobel.jpg
-
 # Taller 4 Parelela
 
 ## Para probar individualmente:
 
-Compilar con: sudo mpic++ t4.cpp -o t \`pkg-config --cflags --libs opencv\`
+Compilar con: sudo mpic++ taller4.cpp -o t4 \`pkg-config --cflags --libs opencv\`
 
-Correr con: mpirun -np 2 --hostfile mpi_hosts ./t 720p.jpg 720p sobel.jpg
+Correr con: mpirun -np 2 --hostfile mpi_hosts ./t4 720p.jpg 720p sobel.jpg
 
 **Nota:** los parámetros son: nombre de la imagen de entrada, nombre de la imagen de de salida y número de procesos.
 
