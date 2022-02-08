@@ -1,6 +1,8 @@
 #include <iostream>
 #include <mpi.h>
 #include <opencv2/opencv.hpp>
+#include <fstream>
+#include <sys/time.h>
 
 using namespace std;
 using namespace cv;
@@ -19,9 +21,6 @@ int main(int argc, char **argv)
   // partial size (how many bytes will be sent to each process):
   size_t imagePartialSize;
 
-  // how many channels are there in the image?
-  // int channels;
-
   // partial buffer, to contain the image.
   // 'uchar' means 'unsigned char', i.e. an 8-bit value, because each pixel in an image is a byte (0..255)
   uchar *partialBuffer;
@@ -29,6 +28,10 @@ int main(int argc, char **argv)
 
   size_t rows;
   size_t cols;
+  
+  //Establecemos las variables de tiempo para las mediciones respectivas
+  struct timeval tval_before, tval_after, tval_result;
+  gettimeofday(&tval_before, NULL);
 
   // ------------------------------------
 
@@ -45,7 +48,7 @@ int main(int argc, char **argv)
   if (rank == 0)
   {
     // read the image
-    imgOrig = cv::imread("720p.jpg", cv::IMREAD_UNCHANGED);
+    imgOrig = cv::imread(argv[1], cv::IMREAD_UNCHANGED);
 
     // check if it's empty:
     if (imgOrig.empty())
@@ -61,11 +64,6 @@ int main(int argc, char **argv)
     // the explanation can be found here: https://stackoverflow.com/a/26441073/4003714
     imageTotalSize = imgOrig.step[0] * imgOrig.rows;
 
-    /*std::cout << "imageTotalSize: " << imageTotalSize << std::endl;
-    std::cout << "rows: " << rows << std::endl;
-    std::cout << "cols: " << cols << std::endl;
-    std::cout << "rcSize: " << cols * rows * 3 << std::endl;*/
-
     // check if we can evenly divide the image bytes by the number of processes
     // the image.total() method returns the number of elements, i.e. (rows * cols)
     if (imgOrig.total() % size)
@@ -76,8 +74,6 @@ int main(int argc, char **argv)
 
     // get partial size (how many bytes are sent to each process):
     imagePartialSize = imageTotalSize / size;
-
-    //std::cout << "The image will be divided into blocks of " << imagePartialSize << " bytes each" << std::endl;
   }
 
   // send the "partial size" from #0 to other processes:
@@ -87,9 +83,6 @@ int main(int argc, char **argv)
 
   MPI_Bcast(&rows, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
   MPI_Bcast(&cols, 1, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
-
-  // send the number of channels in the image from #0 to other processes:
-  // MPI_Bcast( &channels, 1, MPI_INT, 0, MPI_COMM_WORLD );
 
   // synchronize the processes here, to make sure that the sizes are initialized:
   MPI_Barrier(MPI_COMM_WORLD);
@@ -112,16 +105,6 @@ int main(int argc, char **argv)
   // -----------------------------------------------------------------------------------------------------------------------------------------------
   // AND NOW HERE EACH PROCESS HAS ITS OWN PART OF THE IMAGE!
 
-  // THE PARTS ARE DIVIDED ROW-WISE, I.E. THE FIRST PROCESS WILL HAVE THE FIRST COUPLE OF ROWS, THE SECOND PROCESS HAS THE NEXT COUPLE OF ROWS, ETC.
-
-  // IMPORTANT: the matrix `partialBuffer` is 1-dimensional, and contains the image data in the following format:
-  // b0 g0 r0   b1 g1 r1   b2 g2 r2   b3 g3 r3 ....... bN-1 gN-1 rN-1
-  // so, just a sequence of (B, G, R) values, from beginning to end
-
-  // you can convert it into a 3D matrix here, if you want, or into a 2D-matrix... or just leave it like that.
-
-  // but anyway, you can now process the image, FOR EXAMPLE:
-
   for (size_t i = 0; i < imagePartialSize; i += 3)
   {
     uchar r = partialBuffer[i + 0];
@@ -133,23 +116,6 @@ int main(int argc, char **argv)
     partialBuffer[i + 2] = r * 0.299f + g * 0.587f + b * 0.114f;
   }
 
-  // iterate through the image
-  /*for ( size_t i = 0; i < imagePartialSize; i += channels )
-  {
-    // get the pixel:
-    uchar* B = &partialBuffer[i];
-    uchar* G = &partialBuffer[i+1];
-    uchar* R = &partialBuffer[i+2];
-
-    // also if there's an Alpha (transparency) channel:
-    // uchar *A = &partialBuffer[i+3];
-
-
-    // for example, swap the blue and the red:
-    uchar temp = *B;
-    *B = *R;
-    *R = temp;
-  }*/
   // -----------------------------------------------------------------------------------------------------------------------------------------------
 
   // synchronize the image processing:
@@ -163,18 +129,6 @@ int main(int argc, char **argv)
 
   // and now we finally send the partial buffers back to the ROOT, gathering the complete image:
   MPI_Gather(partialBuffer, imagePartialSize, MPI_UNSIGNED_CHAR, imgGray.data, imagePartialSize, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
-
-  // initialize the output image (only need to do it in the ROOT process)
-  /*if (rank == 0)
-  {
-    unsigned char *rgb_image = imgGray.data;
-    // llenar el array de datos rgb del host
-    int x = 0;
-    for (x = 0; x < rows * cols * 3; x++)
-      h_imgOrig[x] = rgb_image[x];
-
-    MPI_Bcast(h_imgOrig, imageTotalSize, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
-  }*/
 
   // scatter the image between the processes:
   MPI_Scatter(imgGray.data, imagePartialSize, MPI_UNSIGNED_CHAR, partialBuffer, imagePartialSize, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
@@ -235,7 +189,6 @@ int main(int argc, char **argv)
       partialBufferSobel[x + f] = fsum;
     }
   }
-  //std::cout << "imagePartialSize: " << imagePartialSize << std::endl;
 
   // synchronize the image processing:
   MPI_Barrier(MPI_COMM_WORLD);
@@ -253,18 +206,24 @@ int main(int argc, char **argv)
   if (rank == 0)
   {
     // save the image:
-    cv::imwrite("gray.jpg", imgGray);
-    cv::imwrite("sobel.jpg", imgSobel);
+    string string1(argv[1]);
+    string1 = string1.substr(0, string1.size() - 4);
+    string1 += "grayscale.png";
+    
+    cv::imwrite(string1, imgGray);
+    cv::imwrite(argv[2], imgSobel);
 
-    // or show it on screen:
-    /*while (true)
-    {
-      cv::imshow("image", imgSobel);
-
-      if (cv::waitKey(1) == 27)
-        break;
-    }*/
     cv::destroyAllWindows();
+    
+    gettimeofday(&tval_after, NULL);
+    timersub(&tval_after, &tval_before, &tval_result);
+    
+    ofstream myfile;
+    myfile.open("tiempos.txt", std::ios_base::app);
+    myfile << "Imagen: " << argv[1] << " - ";
+    myfile << "Tiempo: " << tval_result.tv_sec << "." << tval_result.tv_usec << " s - ";
+    myfile << "Procesos: " << size << "\n";
+    myfile.close();
   }
 
   delete[] partialBuffer;
