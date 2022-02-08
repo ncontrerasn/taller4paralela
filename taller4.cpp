@@ -3,6 +3,7 @@
 #include <opencv2/opencv.hpp>
 #include <fstream>
 #include <sys/time.h>
+#include <chrono>
 
 using namespace std;
 using namespace cv;
@@ -30,8 +31,7 @@ int main(int argc, char **argv)
   size_t cols;
   
   //Establecemos las variables de tiempo para las mediciones respectivas
-  struct timeval tval_before, tval_after, tval_result;
-  gettimeofday(&tval_before, NULL);
+  auto begin = std::chrono::high_resolution_clock::now();
 
   // ------------------------------------
 
@@ -215,13 +215,13 @@ int main(int argc, char **argv)
 
     cv::destroyAllWindows();
     
-    gettimeofday(&tval_after, NULL);
-    timersub(&tval_after, &tval_before, &tval_result);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin);
     
     ofstream myfile;
     myfile.open("tiempos.txt", std::ios_base::app);
     myfile << "Imagen: " << argv[1] << " - ";
-    myfile << "Tiempo: " << tval_result.tv_sec << "." << tval_result.tv_usec << " s - ";
+    myfile << "Tiempo: " << elapsed.count() * 1e-9 << " s - ";
     myfile << "Procesos: " << size << "\n";
     myfile.close();
   }
