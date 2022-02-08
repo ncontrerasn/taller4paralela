@@ -77,7 +77,7 @@ int main(int argc, char **argv)
     // get partial size (how many bytes are sent to each process):
     imagePartialSize = imageTotalSize / size;
 
-    std::cout << "The image will be divided into blocks of " << imagePartialSize << " bytes each" << std::endl;
+    //std::cout << "The image will be divided into blocks of " << imagePartialSize << " bytes each" << std::endl;
   }
 
   // send the "partial size" from #0 to other processes:
