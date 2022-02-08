@@ -61,10 +61,10 @@ int main(int argc, char **argv)
     // the explanation can be found here: https://stackoverflow.com/a/26441073/4003714
     imageTotalSize = imgOrig.step[0] * imgOrig.rows;
 
-    std::cout << "imageTotalSize: " << imageTotalSize << std::endl;
+    /*std::cout << "imageTotalSize: " << imageTotalSize << std::endl;
     std::cout << "rows: " << rows << std::endl;
     std::cout << "cols: " << cols << std::endl;
-    std::cout << "rcSize: " << cols * rows * 3 << std::endl;
+    std::cout << "rcSize: " << cols * rows * 3 << std::endl;*/
 
     // check if we can evenly divide the image bytes by the number of processes
     // the image.total() method returns the number of elements, i.e. (rows * cols)
@@ -235,7 +235,7 @@ int main(int argc, char **argv)
       partialBufferSobel[x + f] = fsum;
     }
   }
-  std::cout << "imagePartialSize: " << imagePartialSize << std::endl;
+  //std::cout << "imagePartialSize: " << imagePartialSize << std::endl;
 
   // synchronize the image processing:
   MPI_Barrier(MPI_COMM_WORLD);
